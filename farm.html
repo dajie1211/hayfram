@@ -1,0 +1,900 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>小农场 · HayFarm v2</title>
+<style>
+  :root { --bg:#a8d8a0; --soil:#8b5a2b; --soil2:#6e4421; --ui:#fffbe6; --ink:#222; --gold:#d4a017; --stone:#888; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body { margin:0; height:100%; background:linear-gradient(180deg,#bce5b3,#9ad08f); font-family: system-ui, "Microsoft YaHei", sans-serif; color:var(--ink); overflow:hidden; user-select:none; }
+  #game { position:relative; width:100vw; height:100vh; display:flex; flex-direction:column; }
+  #hud { display:flex; gap:8px; padding:8px 10px; background:#fffbe6dd; backdrop-filter:blur(4px); border-bottom:2px solid #00000022; font-size:14px; align-items:center; flex-wrap:wrap; z-index:5;}
+  #hud .chip { background:#fff; border:2px solid #0002; border-radius:14px; padding:4px 9px; font-weight:700; font-size:13px;}
+  #hud .gold { color:#a47700; }
+  #hud .xp { color:#2a7a2a; }
+  #hud button { font-size:13px; padding:5px 9px; border-radius:10px; border:2px solid #0003; background:#ffe89a; cursor:pointer; font-weight:700;}
+  #hud button:active { transform: translateY(1px); }
+  #world { flex:1; position:relative; overflow:auto; margin-right:260px; margin-bottom:60px; }
+  #worldInner { position:relative; width:1100px; height:700px; }
+  .tile { position:absolute; width:84px; height:84px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:42px; cursor:pointer; box-shadow: inset 0 0 0 2px #0003; transition: transform 80ms;}
+  .tile:active { transform: scale(0.95); }
+  .tile.plot { background: linear-gradient(160deg, var(--soil), var(--soil2)); }
+  .tile.pen { background: #f5deb3; box-shadow: inset 0 0 0 3px #b8860b; }
+  .tile.machine { background:#e9d2a8; box-shadow: inset 0 0 0 3px #8b5a2b; }
+  .tile.tree { background: linear-gradient(160deg,#7cc47c,#4ea84e); box-shadow: inset 0 0 0 2px #2a6a2a;}
+  .tile.locked { background:repeating-linear-gradient(45deg,#888,#888 8px,#666 8px,#666 16px); opacity:.85; cursor:pointer;}
+  .tile.deco { background: transparent; box-shadow:none; cursor:default; pointer-events:none;}
+  .tile .label { position:absolute; bottom:-16px; font-size:10px; background:#000a; color:#fff; padding:1px 5px; border-radius:8px; white-space:nowrap;}
+  .tile .bar { position:absolute; left:6px; right:6px; bottom:4px; height:6px; background:#0006; border-radius:3px; overflow:hidden;}
+  .tile .bar > i { display:block; height:100%; background:#7cd97c; }
+  .tile .badge { position:absolute; top:-6px; right:-6px; background:#e74c3c; color:#fff; font-size:12px; font-weight:700; min-width:20px; height:20px; border-radius:10px; padding:0 5px; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px #0006;}
+  .tile.ready { animation: bounce 1s infinite; }
+  @keyframes bounce { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-4px);} }
+  #side { position:absolute; right:6px; top:54px; bottom:6px; width:250px; background:#fffbe6ee; border:2px solid #0003; border-radius:14px; overflow:hidden; z-index:4; display:flex; flex-direction:column;}
+  #tabs { display:flex; background:#f0e0a0; border-bottom:2px solid #0003;}
+  #tabs button { flex:1; border:none; background:transparent; padding:7px 4px; font-weight:700; cursor:pointer; font-size:12px; border-right:1px solid #0002;}
+  #tabs button.active { background:#fffbe6; color:#a47700;}
+  #tabBody { flex:1; overflow:auto; padding:8px;}
+  .row { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:5px 4px; border-bottom:1px dashed #0002; font-size:13px;}
+  .row:last-child { border-bottom:none;}
+  .row .name { font-size:13px;}
+  .row .qty { font-size:11px; color:#666;}
+  .row button { font-size:11px; padding:3px 7px; border-radius:7px; border:1px solid #0004; background:#ffe89a; cursor:pointer; font-weight:700;}
+  .row button:disabled { background:#ddd; color:#999; cursor:not-allowed;}
+  .order { background:#fff; border:2px solid #d4a017; border-radius:10px; padding:7px; margin-bottom:8px; font-size:12px;}
+  .order .needs { display:flex; flex-wrap:wrap; gap:3px; margin:4px 0;}
+  .order .needs span { background:#f7f7f7; border:1px solid #ddd; border-radius:6px; padding:2px 5px;}
+  .order .needs span.ok { background:#dfffdf; border-color:#7c7;}
+  .order .reward { color:#a47700; font-weight:700;}
+  .order .actions { display:flex; gap:4px; margin-top:4px;}
+  .order button { flex:1; font-size:11px;}
+  #toast { position:absolute; left:50%; top:80px; transform:translateX(-50%); background:#000c; color:#fff; padding:8px 16px; border-radius:20px; font-size:14px; opacity:0; transition: opacity 200ms; z-index:10; pointer-events:none;}
+  #toast.show { opacity:1; }
+  #seedbar { position:absolute; left:8px; bottom:8px; right:266px; display:flex; gap:5px; background:#fffbe6cc; padding:6px; border-radius:14px; border:2px solid #0003; z-index:4; overflow:auto;}
+  #seedbar button { font-size:13px; padding:5px 8px; border-radius:10px; border:2px solid #0003; background:#fff; cursor:pointer; font-weight:700; display:flex; flex-direction:column; align-items:center; flex-shrink:0;}
+  #seedbar button.active { background:#ffe89a; box-shadow: inset 0 0 0 2px #d4a017;}
+  #seedbar button small { font-size:9px; color:#666; font-weight:500;}
+  #modal { position:absolute; inset:0; background:#000a; z-index:20; display:none; align-items:center; justify-content:center; padding:20px;}
+  #modal.show { display:flex; }
+  #modalBox { background:#fffbe6; border-radius:14px; padding:16px; max-width:400px; width:100%; max-height:80vh; overflow:auto;}
+  #modalBox h2 { margin:0 0 10px; }
+  #modalBox button.close { float:right; background:#e74c3c; color:#fff; border:none; padding:4px 10px; border-radius:8px; cursor:pointer; font-weight:700;}
+  .recipe { display:flex; justify-content:space-between; align-items:center; padding:6px; border:1px solid #ddd; border-radius:8px; margin-bottom:6px; background:#fff;}
+  .recipe .info { font-size:13px;}
+  .recipe .ing { font-size:11px; color:#666;}
+  .achievement { padding:6px; border:1px solid #ddd; border-radius:8px; margin-bottom:5px; background:#fff; font-size:12px;}
+  .achievement.done { background:#dfffdf; border-color:#7c7;}
+  .ach-bar { height:5px; background:#eee; border-radius:3px; overflow:hidden; margin-top:3px;}
+  .ach-bar > i { display:block; height:100%; background:#7cd97c;}
+  /* === MOBILE: 大触屏优化 === */
+  @media (max-width: 800px) {
+    /* 手机端：世界不留侧栏margin，因为侧栏改成底部抽屉了 */
+    #world { margin-right:0; margin-bottom:60px; }
+    /* HUD 顶栏：大字大按钮 */
+    #hud { padding:10px 8px; gap:6px;}
+    #hud .chip { font-size:15px; padding:6px 10px;}
+    #hud button { font-size:15px; padding:9px 12px; min-width:44px; min-height:44px;}
+    #streak { display:none;}  /* 手机省空间 */
+
+    /* 地块放大到 100px，emoji 48px */
+    .tile { width:100px; height:100px; font-size:48px; border-radius:14px;}
+    .tile .label { font-size:12px; padding:2px 7px; bottom:-18px;}
+    .tile .badge { min-width:26px; height:26px; font-size:14px; border-radius:13px;}
+    #worldInner { width:1400px; height:900px;}
+
+    /* 侧边栏改成底部抽屉，从屏幕底部滑出 */
+    #side {
+      position:fixed; left:0; right:0; bottom:0; top:auto; width:auto;
+      max-height:55vh; border-radius:18px 18px 0 0; border:none;
+      box-shadow:0 -4px 16px #0004; transform:translateY(calc(100% - 52px));
+      transition: transform 250ms; z-index:6;
+    }
+    #side.open { transform:translateY(0);}
+    #side::before {
+      content:''; position:absolute; left:50%; top:6px; transform:translateX(-50%);
+      width:50px; height:5px; background:#0003; border-radius:3px;
+    }
+    #tabs { padding-top:14px;}
+    #tabs button { padding:14px 4px; font-size:15px;}
+    #tabBody { padding:12px; max-height:calc(55vh - 60px);}
+
+    /* 侧边栏内文字、按钮全部放大 */
+    .row { padding:10px 6px; font-size:15px;}
+    .row .name { font-size:15px;}
+    .row .qty { font-size:12px;}
+    .row button { font-size:14px; padding:8px 12px; min-width:44px; min-height:40px;}
+    .order { padding:10px; font-size:14px;}
+    .order .needs span { font-size:14px; padding:4px 8px;}
+    .order button { font-size:14px; padding:10px; min-height:40px;}
+    .recipe { padding:10px;}
+    .recipe .info { font-size:15px;}
+    .recipe .ing { font-size:12px;}
+    .recipe button { font-size:14px; padding:10px 14px; min-height:40px;}
+
+    /* 种子栏：避开底部抽屉，放大按钮 */
+    #seedbar { right:8px; bottom:60px; padding:8px; gap:6px;}
+    #seedbar button { font-size:18px; padding:10px 12px; min-width:54px; min-height:54px;}
+    #seedbar button small { font-size:11px;}
+
+    /* 模态弹窗占满屏幕，更易点击 */
+    #modal { padding:8px;}
+    #modalBox { max-width:none; padding:14px; max-height:92vh; border-radius:18px;}
+    #modalBox h2 { font-size:20px;}
+    #modalBox button.close { width:36px; height:36px; font-size:18px; padding:0;}
+
+    /* Toast 大一点 */
+    #toast { font-size:16px; padding:10px 20px;}
+  }
+  /* 超小屏（窄手机） */
+  @media (max-width: 380px) {
+    #hud .chip { font-size:13px; padding:5px 8px;}
+    #hud button { font-size:13px; padding:8px 10px;}
+    .tile { width:90px; height:90px; font-size:44px;}
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="hud">
+    <span class="chip gold">💰 <span id="coins">0</span></span>
+    <span class="chip">💎 <span id="gems">0</span></span>
+    <span class="chip xp">Lv <span id="lv">1</span> · <span id="xp">0</span>/<span id="xpn">20</span></span>
+    <span class="chip">📦 <span id="invn">0</span>/<span id="invc">50</span></span>
+    <button onclick="game.speed=(game.speed===1?5:game.speed===5?60:game.speed===60?600:1); toast('⏩ '+game.speed+'x')">⏩<span id="spd">1x</span></button>
+    <button onclick="save(true)">💾</button>
+    <button onclick="openShopModal()">🏪 商店</button>
+    <button onclick="openSyncModal()" title="跨设备同步存档">☁️ 同步</button>
+    <button onclick="if(confirm('真的清空存档?')){localStorage.removeItem('hayfarm'); location.reload();}">🗑️</button>
+    <span style="margin-left:auto; font-size:11px; color:#666;" id="streak"></span>
+  </div>
+  <div id="world"><div id="worldInner"></div></div>
+  <div id="seedbar"></div>
+  <div id="side">
+    <div id="tabs">
+      <button data-tab="orders" class="active">📋 订单</button>
+      <button data-tab="inv">📦 仓库</button>
+      <button data-tab="ach">🏆 成就</button>
+    </div>
+    <div id="tabBody"></div>
+  </div>
+  <div id="toast"></div>
+  <div id="modal"><div id="modalBox"></div></div>
+</div>
+
+<script>
+// ============= DATA =============
+const ITEMS = {
+  wheat:    {name:'小麦', emoji:'🌾', price:3},
+  corn:     {name:'玉米', emoji:'🌽', price:8},
+  carrot:   {name:'胡萝卜', emoji:'🥕', price:14},
+  tomato:   {name:'番茄', emoji:'🍅', price:22},
+  strawberry:{name:'草莓', emoji:'🍓', price:35},
+  potato:   {name:'土豆', emoji:'🥔', price:48},
+  pumpkin:  {name:'南瓜', emoji:'🎃', price:70},
+  apple:    {name:'苹果', emoji:'🍎', price:40},
+  grape:    {name:'葡萄', emoji:'🍇', price:90},
+  egg:      {name:'鸡蛋', emoji:'🥚', price:18},
+  milk:     {name:'牛奶', emoji:'🥛', price:28},
+  wool:     {name:'羊毛', emoji:'🧶', price:42},
+  bacon:    {name:'培根', emoji:'🥓', price:55},
+  feed:     {name:'饲料', emoji:'🌰', price:6},
+  bread:    {name:'面包', emoji:'🍞', price:40},
+  cake:     {name:'蛋糕', emoji:'🎂', price:140},
+  butter:   {name:'黄油', emoji:'🧈', price:60},
+  cheese:   {name:'奶酪', emoji:'🧀', price:90},
+  juice:    {name:'果汁', emoji:'🧃', price:80},
+  jam:      {name:'果酱', emoji:'🍯', price:110},
+  sweater:  {name:'毛衣', emoji:'🧥', price:160},
+  pizza:    {name:'披萨', emoji:'🍕', price:200},
+};
+const CROPS = {
+  wheat:    {item:'wheat',    cost:1,  grow:30,   yield:2, xp:1, lv:1},
+  corn:     {item:'corn',     cost:3,  grow:90,   yield:2, xp:2, lv:2},
+  carrot:   {item:'carrot',   cost:6,  grow:180,  yield:2, xp:3, lv:3},
+  tomato:   {item:'tomato',   cost:10, grow:300,  yield:2, xp:5, lv:5},
+  strawberry:{item:'strawberry',cost:18,grow:600, yield:2, xp:8, lv:7},
+  potato:   {item:'potato',   cost:25, grow:900,  yield:2, xp:10,lv:9},
+  pumpkin:  {item:'pumpkin',  cost:40, grow:1500, yield:2, xp:14,lv:11},
+};
+const TREES = {
+  apple: {item:'apple', regrow:600, yield:3, xp:6, lv:4, cost:120, emoji:'🍎'},
+  grape: {item:'grape', regrow:1200,yield:3, xp:12,lv:8, cost:350, emoji:'🍇'},
+};
+const RECIPES = {
+  feed:    {machine:'mill',   inputs:{wheat:2, corn:1},                  output:'feed',    amount:1, time:20,  xp:2,  lv:1},
+  bread:   {machine:'bakery', inputs:{wheat:3},                          output:'bread',   amount:1, time:60,  xp:3,  lv:2},
+  cake:    {machine:'bakery', inputs:{wheat:4, egg:2, milk:1},           output:'cake',    amount:1, time:240, xp:8,  lv:5},
+  butter:  {machine:'dairy',  inputs:{milk:2},                           output:'butter',  amount:1, time:120, xp:4,  lv:4},
+  cheese:  {machine:'dairy',  inputs:{milk:3},                           output:'cheese',  amount:1, time:300, xp:6,  lv:5},
+  juice:   {machine:'press',  inputs:{apple:3},                          output:'juice',   amount:1, time:200, xp:5,  lv:6},
+  jam:     {machine:'press',  inputs:{strawberry:3, grape:1},            output:'jam',     amount:1, time:420, xp:9,  lv:8},
+  sweater: {machine:'loom',   inputs:{wool:3},                           output:'sweater', amount:1, time:480, xp:11, lv:6},
+  pizza:   {machine:'bakery', inputs:{wheat:3, tomato:2, cheese:1},      output:'pizza',   amount:1, time:540, xp:15, lv:7},
+};
+const ANIMALS = {
+  chicken: {feed:'feed', produce:'egg',   time:60,  xp:2, lv:1, cost:0,    emoji:'🐔'},
+  cow:     {feed:'feed', produce:'milk',  time:180, xp:4, lv:3, cost:200,  emoji:'🐄'},
+  sheep:   {feed:'feed', produce:'wool',  time:300, xp:6, lv:5, cost:500,  emoji:'🐑'},
+  pig:     {feed:'feed', produce:'bacon', time:420, xp:8, lv:7, cost:1000, emoji:'🐖'},
+};
+const MACHINES = {
+  mill:   {emoji:'🏚️', name:'饲料磨', lv:1, cost:0},
+  bakery: {emoji:'🏠', name:'面包房', lv:2, cost:0},
+  dairy:  {emoji:'🥛', name:'乳制坊', lv:4, cost:800},
+  press:  {emoji:'🍷', name:'榨汁坊', lv:6, cost:1500},
+  loom:   {emoji:'🧵', name:'织布机', lv:6, cost:2000},
+};
+const ACHIEVEMENTS = [
+  {id:'farmer1', name:'初出茅庐', desc:'收获10个作物',    goal:10,  reward:50,   key:'cropsHarvested'},
+  {id:'farmer2', name:'熟练农夫', desc:'收获100个作物',   goal:100, reward:200,  key:'cropsHarvested'},
+  {id:'farmer3', name:'农场大师', desc:'收获1000个作物',  goal:1000,reward:2000, key:'cropsHarvested'},
+  {id:'sell1',   name:'初尝甜头', desc:'累计赚1000金币',  goal:1000,reward:100,  key:'coinsEarned'},
+  {id:'sell2',   name:'生意兴隆', desc:'累计赚10000金币', goal:10000,reward:500, key:'coinsEarned'},
+  {id:'order1',  name:'诚信商人', desc:'完成5个订单',     goal:5,   reward:80,   key:'ordersDone'},
+  {id:'order2',  name:'订单达人', desc:'完成50个订单',    goal:50,  reward:600,  key:'ordersDone'},
+  {id:'level',   name:'步步高升', desc:'达到10级',        goal:10,  reward:300,  key:'level'},
+  {id:'craft',   name:'巧手工匠', desc:'制作20件成品',    goal:20,  reward:150,  key:'crafted'},
+];
+const DAILY_REWARDS = [50, 80, 120, 180, 250, 350, 500];  // day 1-7
+const STONE_COSTS = [200, 500, 1200, 3000];               // unlock land 1,2,3,4
+
+// ============= STATE =============
+const SAVE_KEY = 'hayfarm';
+let game;
+function freshGame(){ return {
+  v:2,
+  coins: 100, gems: 5, level: 1, xp: 0,
+  capacity: 50,
+  inv: {},
+  plots: [],
+  trees: [],
+  pens: [],
+  machines: [],
+  orders: [],
+  ordersLastGen: 0,
+  unlocked: { lands:[true,false,false,false,false] },   // 5 zones
+  selectedSeed: 'wheat',
+  speed: 1,
+  stats: { cropsHarvested:0, coinsEarned:0, ordersDone:0, crafted:0, level:1 },
+  ach: {},        // id -> claimed
+  daily: { lastClaimDay:'', streak:0 },
+  ownedMachines: { mill:true, bakery:true },
+  ownedPens: { chicken:1 },
+  deco: [],       // {x,y,emoji}
+}; }
+
+function defaultLayout(){
+  // Zone 0 (start): 6 plots, chicken pen, mill, bakery
+  // x,y in grid (100px each)
+  let pid=0;
+  // plots row
+  for(let x=0;x<3;x++) for(let y=0;y<2;y++) game.plots.push({id:'p'+(pid++), x, y, zone:0, crop:null, endAt:0, grow:0});
+  game.pens.push({id:'pen_chicken_0', type:'chicken', x:3, y:0, zone:0, slots:[{fed:false,endAt:0},{fed:false,endAt:0},{fed:false,endAt:0}]});
+  game.machines.push({id:'m_mill', type:'mill', x:3, y:1, zone:0, queue:[], ready:[]});
+  game.machines.push({id:'m_bakery', type:'bakery', x:4, y:0, zone:0, queue:[], ready:[]});
+}
+
+function load(){
+  const raw = localStorage.getItem(SAVE_KEY);
+  game = freshGame();
+  if(raw){ try{ const s=JSON.parse(raw); if(s.v===2) game = Object.assign(game, s); else defaultLayout(); }catch(e){ defaultLayout(); } }
+  if(!game.plots.length) defaultLayout();
+  game.speed = 1;
+  checkDaily();
+}
+function save(manual){ localStorage.setItem(SAVE_KEY, JSON.stringify(game)); if(manual) toast('💾 已存档'); }
+setInterval(()=>save(false), 8000);
+window.addEventListener('beforeunload', ()=>save(false));
+
+// ============= HELPERS =============
+const now = () => Date.now() / 1000;
+const today = () => new Date().toISOString().slice(0,10);
+function xpToNext(){ return Math.round(20 * Math.pow(game.level, 1.4)); }
+function addXp(n){ game.xp += n;
+  while(game.xp >= xpToNext()){ game.xp -= xpToNext(); game.level++; game.gems++; toast(`🎉 升级到 Lv ${game.level}！+1💎`); }
+  game.stats.level = game.level; checkAch();
+}
+function invCount(){ let n=0; for(const k in game.inv) n+=game.inv[k]; return n; }
+function addItem(id, n){
+  const free = game.capacity - invCount();
+  const take = Math.min(free, n);
+  if(take<=0){ toast('📦 仓库满了！升级仓库'); return false; }
+  game.inv[id] = (game.inv[id]||0) + take;
+  if(take<n) toast('📦 仓库满，部分丢失');
+  return true;
+}
+function removeItem(id, n){ if((game.inv[id]||0) < n) return false; game.inv[id]-=n; if(game.inv[id]<=0) delete game.inv[id]; return true; }
+function addCoins(n){ game.coins += n; if(n>0) game.stats.coinsEarned += n; checkAch(); }
+
+// ============= FARMING =============
+function plant(plot, cropId){
+  if(plot.crop) return;
+  const c = CROPS[cropId];
+  if(game.level < c.lv) return toast(`需要 Lv ${c.lv}`);
+  if(game.coins < c.cost) return toast('💰 金币不够');
+  game.coins -= c.cost;
+  plot.crop = cropId;
+  plot.endAt = now() + c.grow / game.speed;
+  plot.grow = c.grow;
+}
+function harvest(plot){
+  if(!plot.crop || now() < plot.endAt) return;
+  const c = CROPS[plot.crop];
+  if(addItem(c.item, c.yield)){ addXp(c.xp); plot.crop=null; plot.endAt=0; game.stats.cropsHarvested += c.yield; checkAch(); }
+}
+function tapPlot(plot){ if(plot.crop && now()>=plot.endAt) harvest(plot); else if(!plot.crop) plant(plot, game.selectedSeed); }
+
+function tapTree(t){
+  const T = TREES[t.type];
+  if(now() >= t.endAt){
+    if(addItem(T.item, T.yield)){ addXp(T.xp); t.endAt = now() + T.regrow/game.speed; game.stats.cropsHarvested += T.yield; checkAch(); }
+  }
+}
+
+// ============= ANIMALS =============
+function tapPen(pen){
+  const A = ANIMALS[pen.type];
+  const ready = pen.slots.filter(s=>s.fed && now()>=s.endAt).length;
+  if(ready>0){
+    let got=0;
+    pen.slots.forEach(s=>{ if(s.fed && now()>=s.endAt){ if(addItem(A.produce,1)){ addXp(A.xp); s.fed=false; s.endAt=0; got++; }}});
+    if(got) toast(`✅ +${got} ${ITEMS[A.produce].emoji}`);
+  } else {
+    let need = pen.slots.filter(s=>!s.fed).length;
+    if(need===0) return toast('动物吃饱了');
+    if((game.inv.feed||0) < need) return toast('🌰 饲料不够');
+    removeItem('feed', need);
+    pen.slots.forEach(s=>{ if(!s.fed){ s.fed=true; s.endAt=now()+A.time/game.speed; }});
+    toast('🍽️ 已喂食');
+  }
+}
+
+// ============= MACHINES =============
+function tickMachine(m){ while(m.queue.length && now()>=m.queue[0].endAt){ m.ready.push(m.queue[0].recipe); m.queue.shift(); }}
+function craft(m, rid){
+  const r = RECIPES[rid]; if(r.machine!==m.type) return;
+  if(game.level<r.lv) return toast(`需要 Lv ${r.lv}`);
+  if(m.queue.length>=4) return toast('队列已满');
+  for(const k in r.inputs) if((game.inv[k]||0)<r.inputs[k]) return toast(`缺 ${ITEMS[k].name}`);
+  for(const k in r.inputs) removeItem(k, r.inputs[k]);
+  const start = m.queue.length===0 ? now() : m.queue[m.queue.length-1].endAt;
+  m.queue.push({recipe:rid, endAt:start + r.time/game.speed});
+  toast('🍳 开始制作');
+}
+function tapMachine(m){
+  if(m.ready.length){
+    let got=0;
+    for(let i=m.ready.length-1;i>=0;i--){
+      const r = RECIPES[m.ready[i]];
+      if(addItem(r.output, r.amount)){ addXp(r.xp); m.ready.splice(i,1); got++; game.stats.crafted++; }
+    }
+    if(got) { toast(`🎁 +${got}`); checkAch(); }
+    return;
+  }
+  openRecipeModal(m);
+}
+function openRecipeModal(m){
+  const opts = Object.entries(RECIPES).filter(([_,r])=>r.machine===m.type);
+  let html = `<button class="close" onclick="closeModal()">×</button>`;
+  html += `<h2>${MACHINES[m.type].emoji} ${MACHINES[m.type].name}</h2>`;
+  html += `<div style="font-size:12px;color:#666;margin-bottom:8px;">队列 ${m.queue.length}/4</div>`;
+  for(const [id,r] of opts){
+    const locked = game.level<r.lv;
+    const canMake = !locked && Object.entries(r.inputs).every(([k,n])=>(game.inv[k]||0)>=n);
+    const ing = Object.entries(r.inputs).map(([k,n])=>n+ITEMS[k].emoji).join(' + ');
+    html += `<div class="recipe">
+      <div><div class="info">${ITEMS[r.output].emoji} ${ITEMS[r.output].name} ${locked?'🔒Lv'+r.lv:''}</div>
+      <div class="ing">${ing} · ${r.time}秒 · +${r.xp}XP</div></div>
+      <button onclick="craft(currentMachine,'${id}'); render(); updateHud(); openRecipeModal(currentMachine);" ${canMake?'':'disabled'}>制作</button>
+    </div>`;
+  }
+  currentMachine = m;
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modal').classList.add('show');
+}
+let currentMachine = null;
+
+// ============= ORDERS =============
+function genOrder(){
+  const pool = ['wheat','corn','carrot','egg','milk','bread','feed'];
+  if(game.level>=4) pool.push('butter','cheese');
+  if(game.level>=5) pool.push('cake','tomato');
+  if(game.level>=6) pool.push('juice','wool');
+  if(game.level>=7) pool.push('strawberry','pizza','sweater');
+  if(game.level>=8) pool.push('jam','grape');
+  const lineCount = 1 + Math.floor(Math.random()*3);
+  const lines = [];
+  let total = 0;
+  for(let i=0;i<lineCount;i++){
+    const k = pool[Math.floor(Math.random()*pool.length)];
+    const amt = 1+Math.floor(Math.random()*4);
+    lines.push({item:k, amount:amt});
+    total += ITEMS[k].price * amt;
+  }
+  return {
+    id: 'o'+Math.random().toString(36).slice(2,8),
+    lines,
+    coins: Math.round(total*1.6),
+    xp: Math.max(1, lineCount*2 + Math.floor(total/40)),
+    gem: Math.random()<0.08 ? 1 : 0,
+    expires: now() + 60*30/game.speed,   // 30 game-min
+  };
+}
+function tickOrders(){
+  // expire
+  game.orders = game.orders.filter(o => now() < o.expires);
+  // refresh: keep min 3
+  if(now() - game.ordersLastGen > 60/game.speed && game.orders.length < 6){
+    game.orders.push(genOrder());
+    game.ordersLastGen = now();
+  }
+}
+function fulfillOrder(o){
+  for(const l of o.lines) if((game.inv[l.item]||0)<l.amount) return toast('物品不够');
+  for(const l of o.lines) removeItem(l.item, l.amount);
+  addCoins(o.coins); addXp(o.xp); if(o.gem) game.gems += o.gem;
+  game.orders = game.orders.filter(x=>x!==o);
+  game.stats.ordersDone++; checkAch();
+  toast(`📦 完成订单 +${o.coins}💰${o.gem?' +💎':''}`);
+}
+function declineOrder(o){
+  if(game.coins<5) return toast('需要 5💰 拒单');
+  game.coins -= 5;
+  game.orders = game.orders.filter(x=>x!==o);
+  toast('订单已拒');
+}
+
+// ============= ACHIEVEMENTS =============
+function checkAch(){
+  for(const a of ACHIEVEMENTS){
+    const v = game.stats[a.key]||0;
+    if(v >= a.goal && !game.ach[a.id]){
+      game.ach[a.id] = true;
+      addCoins(a.reward);
+      toast(`🏆 ${a.name}！+${a.reward}💰`);
+    }
+  }
+}
+
+// ============= DAILY =============
+function checkDaily(){
+  const d = today();
+  if(game.daily.lastClaimDay === d) return;
+  // streak: yesterday claimed?
+  const y = new Date(); y.setDate(y.getDate()-1);
+  const ystr = y.toISOString().slice(0,10);
+  if(game.daily.lastClaimDay === ystr) game.daily.streak++;
+  else game.daily.streak = 1;
+  if(game.daily.streak > 7) game.daily.streak = 1;
+  const r = DAILY_REWARDS[Math.min(game.daily.streak,7)-1];
+  addCoins(r);
+  game.gems += 1;
+  game.daily.lastClaimDay = d;
+  setTimeout(()=>toast(`📅 每日礼包：连签 ${game.daily.streak}天 +${r}💰 +1💎`), 600);
+}
+
+// ============= SHOP MODAL =============
+function openShopModal(){
+  let html = `<button class="close" onclick="closeModal()">×</button><h2>🏪 商店</h2>`;
+  html += `<div style="font-size:13px;color:#666;margin-bottom:8px;">购买扩建、动物、机器、装饰</div>`;
+
+  html += `<h3 style="margin:8px 0 4px;">📦 仓库升级</h3>
+    <div class="recipe">
+      <div class="info">容量 ${game.capacity} → ${game.capacity+25}</div>
+      <button onclick="if(game.coins>=game.capacity*5){game.coins-=game.capacity*5;game.capacity+=25;toast('📦 仓库升级！');updateHud();openShopModal();}else toast('💰 金币不够')">${game.capacity*5}💰</button>
+    </div>`;
+
+  html += `<h3 style="margin:8px 0 4px;">🗺️ 开拓新土地</h3>`;
+  for(let i=1;i<5;i++){
+    if(game.unlocked.lands[i]){ html += `<div class="recipe"><div class="info">区域${i+1} ✅已开拓</div></div>`; continue; }
+    if(i>1 && !game.unlocked.lands[i-1]){ html += `<div class="recipe"><div class="info">区域${i+1} 🔒先开拓上一区</div></div>`; continue; }
+    const cost = STONE_COSTS[i-1];
+    html += `<div class="recipe">
+      <div class="info">区域${i+1} <span style="font-size:11px;color:#666;">+6 块地</span></div>
+      <button onclick="if(game.coins>=${cost}){game.coins-=${cost};unlockLand(${i});}else toast('💰 金币不够')">${cost}💰</button>
+    </div>`;
+  }
+
+  html += `<h3 style="margin:8px 0 4px;">🐾 购买动物畜栏</h3>`;
+  for(const [t,A] of Object.entries(ANIMALS)){
+    if(t==='chicken' && game.ownedPens.chicken) continue;
+    const owned = game.ownedPens[t]||0;
+    const locked = game.level<A.lv;
+    html += `<div class="recipe">
+      <div><div class="info">${A.emoji} ${ITEMS[A.produce].name}畜栏 ${locked?'🔒Lv'+A.lv:''}</div><div class="ing">已拥有 ${owned}</div></div>
+      <button onclick="buyPen('${t}')" ${locked||game.coins<A.cost?'disabled':''}>${A.cost}💰</button>
+    </div>`;
+  }
+
+  html += `<h3 style="margin:8px 0 4px;">🏭 购买机器</h3>`;
+  for(const [t,M] of Object.entries(MACHINES)){
+    if(game.ownedMachines[t]) continue;
+    const locked = game.level<M.lv;
+    html += `<div class="recipe">
+      <div class="info">${M.emoji} ${M.name} ${locked?'🔒Lv'+M.lv:''}</div>
+      <button onclick="buyMachine('${t}')" ${locked||game.coins<M.cost?'disabled':''}>${M.cost}💰</button>
+    </div>`;
+  }
+
+  html += `<h3 style="margin:8px 0 4px;">🌳 果树</h3>`;
+  for(const [t,T] of Object.entries(TREES)){
+    const locked = game.level<T.lv;
+    html += `<div class="recipe">
+      <div class="info">${T.emoji} ${ITEMS[T.item].name}树 ${locked?'🔒Lv'+T.lv:''}</div>
+      <button onclick="buyTree('${t}')" ${locked||game.coins<T.cost?'disabled':''}>${T.cost}💰</button>
+    </div>`;
+  }
+
+  html += `<h3 style="margin:8px 0 4px;">🌸 装饰（纯美化）</h3>`;
+  const decos = [['🌸','花',30],['🌳','树',50],['🪨','石头',20],['⛲','喷泉',300],['🏛️','雕像',500]];
+  for(const [e,n,c] of decos){
+    html += `<div class="recipe">
+      <div class="info">${e} ${n}</div>
+      <button onclick="buyDeco('${e}',${c})" ${game.coins<c?'disabled':''}>${c}💰</button>
+    </div>`;
+  }
+
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modal').classList.add('show');
+}
+function closeModal(){ document.getElementById('modal').classList.remove('show'); }
+
+// ============= CROSS-DEVICE SYNC =============
+// Strategy 1: text code (export → copy → paste on other PC)
+// Strategy 2: cloud via jsonblob.com (free, no auth, returns a URL/id)
+function openSyncModal(){
+  save(false);
+  const code = btoa(unescape(encodeURIComponent(JSON.stringify(game))));
+  let html = `<button class="close" onclick="closeModal()">×</button>
+    <h2>☁️ 跨设备同步</h2>
+    <div style="font-size:12px;color:#666;margin-bottom:10px;">
+      在另一台电脑/手机上打开同一个游戏，把下面的"存档码"复制粘贴过去就能继续玩。<br>
+      或者点"☁️ 上传云端"拿一个短码，在另一设备输入短码即可。
+    </div>
+
+    <h3 style="margin:10px 0 5px;">📋 方法 A：存档码（推荐，无需联网）</h3>
+    <div style="font-size:12px;color:#555;margin-bottom:6px;">
+      ① 在本机点"复制存档码"<br>
+      ② 在另一台设备打开 farm.html，点"☁️ 同步"，粘贴到下方输入框，点"载入"
+    </div>
+    <textarea id="syncCode" style="width:100%;height:80px;font-size:11px;font-family:monospace;padding:4px;">${code}</textarea>
+    <div style="display:flex;gap:6px;margin-top:6px;">
+      <button class="row" style="flex:1;padding:6px;background:#7cd97c;border:none;border-radius:8px;font-weight:700;cursor:pointer;" onclick="copyCode()">📋 复制存档码</button>
+      <button class="row" style="flex:1;padding:6px;background:#ffe89a;border:none;border-radius:8px;font-weight:700;cursor:pointer;" onclick="loadCode()">📥 载入这段存档</button>
+    </div>
+
+    <h3 style="margin:14px 0 5px;">☁️ 方法 B：云端短码（需联网）</h3>
+    <div style="font-size:12px;color:#555;margin-bottom:6px;">
+      ① 点"上传云端"得到一个 8 位短码<br>
+      ② 在另一设备输入这个短码，点"下载"
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input id="cloudCode" placeholder="8位短码" style="flex:1;padding:6px;font-size:14px;font-family:monospace;text-transform:uppercase;border:2px solid #0003;border-radius:8px;">
+      <button style="padding:6px 10px;background:#a8d8a0;border:none;border-radius:8px;font-weight:700;cursor:pointer;" onclick="cloudUpload()">☁️↑ 上传</button>
+      <button style="padding:6px 10px;background:#ffe89a;border:none;border-radius:8px;font-weight:700;cursor:pointer;" onclick="cloudDownload()">⬇️ 下载</button>
+    </div>
+    <div id="cloudResult" style="margin-top:8px;font-size:13px;color:#a47700;font-weight:700;"></div>
+
+    <div style="margin-top:14px;font-size:11px;color:#888;border-top:1px dashed #ccc;padding-top:8px;">
+      ⚠️ 云端用免费的 jsonblob.com，没有账户验证。短码 = 文件id前8位。<br>
+      ⚠️ 载入会<b>覆盖</b>当前存档，先复制本机存档以防误删。
+    </div>`;
+  document.getElementById('modalBox').innerHTML = html;
+  document.getElementById('modal').classList.add('show');
+}
+
+function copyCode(){
+  const ta = document.getElementById('syncCode');
+  ta.select();
+  navigator.clipboard.writeText(ta.value).then(()=>toast('📋 已复制到剪贴板')).catch(()=>{ document.execCommand('copy'); toast('📋 已复制'); });
+}
+
+function loadCode(){
+  const v = document.getElementById('syncCode').value.trim();
+  if(!v) return toast('请粘贴存档码');
+  if(!confirm('确定要用这段存档码覆盖当前进度？')) return;
+  try{
+    const json = decodeURIComponent(escape(atob(v)));
+    const s = JSON.parse(json);
+    if(!s.v || !s.plots) throw new Error('格式错误');
+    localStorage.setItem(SAVE_KEY, json);
+    toast('✅ 存档已载入，3 秒后刷新');
+    setTimeout(()=>location.reload(), 1500);
+  }catch(e){ toast('❌ 存档码无效：'+e.message); }
+}
+
+// jsonblob.com — free, no auth, returns a numeric id (we keep last 8 chars uppercased as the short code)
+const CLOUD_API = 'https://jsonblob.com/api/jsonBlob';
+const CLOUD_MAP_KEY = 'hayfarm_cloud_map';   // localStorage: shortcode -> full id
+
+function cloudMap(){ try{ return JSON.parse(localStorage.getItem(CLOUD_MAP_KEY)||'{}'); }catch{ return {}; } }
+function saveCloudMap(m){ localStorage.setItem(CLOUD_MAP_KEY, JSON.stringify(m)); }
+
+async function cloudUpload(){
+  document.getElementById('cloudResult').textContent = '☁️ 上传中…';
+  try{
+    save(false);
+    const res = await fetch(CLOUD_API, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify(game),
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const loc = res.headers.get('Location') || '';
+    const id = loc.split('/').pop() || '';
+    if(!id) throw new Error('未拿到云端id');
+    const short = id.slice(-8).toUpperCase();
+    const map = cloudMap(); map[short] = id; saveCloudMap(map);
+    document.getElementById('cloudResult').innerHTML =
+      `✅ 短码: <span style="font-size:18px;background:#fff;border:2px dashed #a47700;padding:3px 10px;border-radius:8px;letter-spacing:2px;">${short}</span><br>
+       <span style="font-size:11px;color:#666;font-weight:400;">在另一台设备输入这个短码点"下载"即可继续玩。短码与完整 id 已存在本机的浏览器里。</span>`;
+    toast('☁️ 已上传');
+  }catch(e){
+    document.getElementById('cloudResult').textContent = '❌ 上传失败：'+e.message+'（云端服务可能暂时不可用，请用方法 A）';
+  }
+}
+
+async function cloudDownload(){
+  const short = (document.getElementById('cloudCode').value||'').trim().toUpperCase();
+  if(short.length<6) return toast('请输入完整短码');
+  document.getElementById('cloudResult').textContent = '☁️ 下载中…';
+  try{
+    // try local map first
+    const map = cloudMap();
+    let id = map[short];
+    if(!id){
+      // user came from another device → we don't have the full id. Ask user for it.
+      const full = prompt('本机未保存这个短码。请粘贴完整云端ID（在源设备的"☁️ 同步"弹窗里查看 URL，或重新上传得到）。\n\n如果太麻烦，直接用"方法 A 存档码"更简单。');
+      if(!full) { document.getElementById('cloudResult').textContent='已取消'; return; }
+      id = full.trim();
+    }
+    const res = await fetch(`${CLOUD_API}/${id}`, {headers:{'Accept':'application/json'}});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const s = await res.json();
+    if(!s.v || !s.plots) throw new Error('数据格式不符');
+    if(!confirm('确定用云端存档覆盖当前进度？')) return;
+    localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+    map[short] = id; saveCloudMap(map);
+    toast('✅ 已下载，刷新中…');
+    setTimeout(()=>location.reload(), 1200);
+  }catch(e){
+    document.getElementById('cloudResult').textContent = '❌ 下载失败：'+e.message;
+  }
+}
+
+function unlockLand(i){
+  game.unlocked.lands[i] = true;
+  // add 6 plots in new zone, laid out horizontally to the right
+  const baseX = 6 + (i-1)*4;
+  let cnt = game.plots.length;
+  for(let x=0;x<3;x++) for(let y=0;y<2;y++) game.plots.push({id:'p_z'+i+'_'+(cnt++), x:baseX+x, y, zone:i, crop:null, endAt:0, grow:0});
+  toast(`🗺️ 区域${i+1}开拓完成！+6 块地`);
+  closeModal(); render(); updateHud();
+}
+function buyPen(t){
+  const A = ANIMALS[t];
+  if(game.coins<A.cost) return;
+  game.coins -= A.cost;
+  const idx = (game.ownedPens[t]||0);
+  game.ownedPens[t] = idx + 1;
+  const zone = Math.floor(game.pens.length / 3);
+  const x = 3 + (zone*4);
+  const y = 2 + game.pens.length % 2;
+  game.pens.push({id:`pen_${t}_${idx}`, type:t, x, y, zone:0, slots:Array.from({length:3},_=>({fed:false,endAt:0}))});
+  toast(`${A.emoji} 已购买！`); closeModal(); render(); updateHud();
+}
+function buyMachine(t){
+  const M = MACHINES[t];
+  if(game.coins<M.cost) return;
+  game.coins -= M.cost;
+  game.ownedMachines[t] = true;
+  const x = 5 + game.machines.length;
+  game.machines.push({id:`m_${t}`, type:t, x, y:1, zone:0, queue:[], ready:[]});
+  toast(`${M.emoji} 已购买！`); closeModal(); render(); updateHud();
+}
+function buyTree(t){
+  const T = TREES[t];
+  if(game.coins<T.cost) return;
+  game.coins -= T.cost;
+  const x = 4 + game.trees.length;
+  game.trees.push({id:`t_${t}_${game.trees.length}`, type:t, x, y:3, endAt: now()+T.regrow/game.speed});
+  toast(`${T.emoji} 已种下！`); closeModal(); render(); updateHud();
+}
+function buyDeco(e, c){
+  if(game.coins<c) return;
+  game.coins -= c;
+  const x = 8 + game.deco.length % 3;
+  const y = 4 + Math.floor(game.deco.length/3);
+  game.deco.push({emoji:e, x, y});
+  toast(`${e} 已放置`); closeModal(); render(); updateHud();
+}
+
+// ============= RENDER =============
+const wi = document.getElementById('worldInner');
+const TS = 100;
+function render(){
+  wi.innerHTML = '';
+  const ox = 20, oy = 20;
+  const place = (el, x, y) => { el.style.left=(ox+x*TS)+'px'; el.style.top=(oy+y*TS)+'px'; wi.appendChild(el); };
+
+  for(const p of game.plots){
+    const d = document.createElement('div'); d.className='tile plot';
+    if(p.crop){
+      const c = CROPS[p.crop];
+      const left = Math.max(0, p.endAt - now());
+      const total = p.grow / game.speed;
+      const t = 1 - left/total;
+      const stage = t<0.33?'🌱':t<0.66?'🌿':ITEMS[c.item].emoji;
+      d.innerHTML = `<span>${stage}</span>`;
+      if(left>0){ const b=document.createElement('div');b.className='bar';b.innerHTML=`<i style="width:${(t*100).toFixed(0)}%"></i>`;d.appendChild(b); }
+      else { d.classList.add('ready'); const bd=document.createElement('div');bd.className='badge';bd.textContent='✓';d.appendChild(bd); }
+    } else d.innerHTML = `<span style="opacity:.3">＋</span>`;
+    d.onclick = ()=>{ tapPlot(p); render(); updateHud(); };
+    place(d, p.x, p.y);
+  }
+  for(const t of game.trees){
+    const T = TREES[t.type];
+    const d = document.createElement('div'); d.className='tile tree';
+    const left = Math.max(0, t.endAt - now());
+    const total = T.regrow/game.speed;
+    const ratio = 1 - left/total;
+    d.innerHTML = `<span>${T.emoji}</span>`;
+    if(left>0){ const b=document.createElement('div');b.className='bar';b.innerHTML=`<i style="width:${(ratio*100).toFixed(0)}%"></i>`;d.appendChild(b); }
+    else { d.classList.add('ready'); const bd=document.createElement('div');bd.className='badge';bd.textContent=T.yield;d.appendChild(bd); }
+    d.onclick = ()=>{ tapTree(t); render(); updateHud(); };
+    place(d, t.x, t.y);
+  }
+  for(const p of game.pens){
+    const A = ANIMALS[p.type];
+    const d = document.createElement('div'); d.className='tile pen';
+    d.innerHTML = `<span>${A.emoji}</span>`;
+    const ready = p.slots.filter(s=>s.fed && now()>=s.endAt).length;
+    const cooking = p.slots.filter(s=>s.fed && now()<s.endAt).length;
+    if(ready){ const b=document.createElement('div');b.className='badge';b.textContent=ready;d.appendChild(b); d.classList.add('ready'); }
+    const lbl=document.createElement('div'); lbl.className='label'; lbl.textContent = ready?`✓${ready}`:cooking?`⏳${cooking}`:'喂食';
+    d.appendChild(lbl);
+    d.onclick = ()=>{ tapPen(p); render(); updateHud(); };
+    place(d, p.x, p.y);
+  }
+  for(const m of game.machines){
+    tickMachine(m);
+    const M = MACHINES[m.type];
+    const d = document.createElement('div'); d.className='tile machine';
+    d.innerHTML = `<span>${M.emoji}</span>`;
+    if(m.ready.length){ const b=document.createElement('div');b.className='badge';b.textContent=m.ready.length;d.appendChild(b); d.classList.add('ready'); }
+    else if(m.queue.length){
+      const e = m.queue[0]; const r = RECIPES[e.recipe];
+      const total = r.time/game.speed; const left = Math.max(0,e.endAt-now()); const t = 1-left/total;
+      const bar=document.createElement('div'); bar.className='bar'; bar.innerHTML=`<i style="width:${(t*100).toFixed(0)}%"></i>`; d.appendChild(bar);
+    }
+    const lbl=document.createElement('div'); lbl.className='label'; lbl.textContent = M.name + (m.queue.length?` ${m.queue.length}`:'');
+    d.appendChild(lbl);
+    d.onclick = ()=>{ tapMachine(m); render(); updateHud(); };
+    place(d, m.x, m.y);
+  }
+  for(const d2 of game.deco){
+    const d = document.createElement('div'); d.className='tile deco'; d.innerHTML = `<span style="font-size:38px">${d2.emoji}</span>`;
+    place(d, d2.x, d2.y);
+  }
+}
+
+function updateHud(){
+  document.getElementById('coins').textContent = game.coins;
+  document.getElementById('gems').textContent = game.gems;
+  document.getElementById('lv').textContent = game.level;
+  document.getElementById('xp').textContent = game.xp;
+  document.getElementById('xpn').textContent = xpToNext();
+  document.getElementById('invn').textContent = invCount();
+  document.getElementById('invc').textContent = game.capacity;
+  document.getElementById('spd').textContent = game.speed+'x';
+  document.getElementById('streak').textContent = '🔥 连签 '+game.daily.streak+'天';
+  renderSeedbar(); renderTab();
+}
+function renderSeedbar(){
+  const bar = document.getElementById('seedbar');
+  bar.innerHTML = '<span style="align-self:center;font-size:12px;padding:0 6px;color:#666;">种子:</span>';
+  for(const id in CROPS){
+    const c = CROPS[id];
+    const b = document.createElement('button');
+    if(game.selectedSeed===id) b.classList.add('active');
+    if(game.level < c.lv){ b.disabled=true; b.style.opacity=.4; b.innerHTML = `🔒<small>Lv${c.lv}</small>`; }
+    else b.innerHTML = `${ITEMS[c.item].emoji}<small>${c.cost}💰</small>`;
+    b.onclick = ()=>{ game.selectedSeed=id; updateHud(); };
+    bar.appendChild(b);
+  }
+}
+
+let activeTab = 'orders';
+document.querySelectorAll('#tabs button').forEach(b=>{
+  b.onclick = ()=>{
+    const side = document.getElementById('side');
+    const isMobile = window.matchMedia('(max-width: 800px)').matches;
+    if(isMobile && activeTab === b.dataset.tab && side.classList.contains('open')){
+      side.classList.remove('open');         // 再点同一个 → 收起
+      return;
+    }
+    activeTab = b.dataset.tab;
+    document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('active', x===b));
+    if(isMobile) side.classList.add('open');  // 手机端：点 tab 展开抽屉
+    renderTab();
+  };
+});
+// 点世界区域收起手机抽屉
+document.getElementById('world').addEventListener('click', ()=>{
+  if(window.matchMedia('(max-width: 800px)').matches){
+    document.getElementById('side').classList.remove('open');
+  }
+});
+function renderTab(){
+  const body = document.getElementById('tabBody');
+  if(activeTab==='orders'){
+    tickOrders();
+    if(!game.orders.length){ body.innerHTML = '<div style="color:#888;padding:8px;font-size:12px;">订单刷新中...</div>'; return; }
+    body.innerHTML = '';
+    for(const o of game.orders){
+      const div = document.createElement('div'); div.className='order';
+      const needs = o.lines.map(l=>{
+        const ok = (game.inv[l.item]||0) >= l.amount;
+        return `<span class="${ok?'ok':''}">${ITEMS[l.item].emoji}${l.amount}</span>`;
+      }).join('');
+      const canDo = o.lines.every(l=>(game.inv[l.item]||0)>=l.amount);
+      const mins = Math.max(0, Math.round((o.expires-now())/60));
+      div.innerHTML = `
+        <div class="needs">${needs}</div>
+        <div class="reward">奖励 ${o.coins}💰 +${o.xp}XP${o.gem?' +💎':''}</div>
+        <div style="font-size:10px;color:#888;">⏰ ${mins}分钟后过期</div>
+        <div class="actions">
+          <button onclick="declineOrder(game.orders.find(x=>x.id==='${o.id}')); render(); updateHud();">拒单 5💰</button>
+          <button ${canDo?'':'disabled'} onclick="fulfillOrder(game.orders.find(x=>x.id==='${o.id}')); render(); updateHud();">交付</button>
+        </div>`;
+      body.appendChild(div);
+    }
+  } else if(activeTab==='inv'){
+    const keys = Object.keys(game.inv).filter(k=>game.inv[k]>0).sort();
+    if(!keys.length){ body.innerHTML='<div style="color:#888;padding:8px;font-size:12px;">仓库空空，去种点小麦 🌾</div>'; return; }
+    body.innerHTML = '';
+    for(const id of keys){
+      const n = game.inv[id], it = ITEMS[id];
+      const row = document.createElement('div'); row.className='row';
+      row.innerHTML = `<div><div class="name">${it.emoji} ${it.name}</div><div class="qty">x${n} · ${it.price}💰</div></div>`;
+      const w = document.createElement('div'); w.style.display='flex'; w.style.gap='3px';
+      const b1 = document.createElement('button'); b1.textContent='1'; b1.onclick=()=>{ if(removeItem(id,1)){addCoins(it.price);} render(); updateHud(); };
+      const b10 = document.createElement('button'); b10.textContent='10'; b10.disabled = n<10; b10.onclick=()=>{ if(removeItem(id,10)){addCoins(it.price*10);} render(); updateHud(); };
+      const ball = document.createElement('button'); ball.textContent='全'; ball.onclick=()=>{ const tot=it.price*n; removeItem(id,n); addCoins(tot); render(); updateHud(); };
+      w.appendChild(b1); w.appendChild(b10); w.appendChild(ball);
+      row.appendChild(w);
+      body.appendChild(row);
+    }
+  } else if(activeTab==='ach'){
+    body.innerHTML = '';
+    for(const a of ACHIEVEMENTS){
+      const v = Math.min(a.goal, game.stats[a.key]||0);
+      const done = game.ach[a.id];
+      const div = document.createElement('div'); div.className='achievement'+(done?' done':'');
+      div.innerHTML = `<b>${done?'✅':'🎯'} ${a.name}</b>
+        <div style="color:#666;font-size:11px;">${a.desc} · 奖励 ${a.reward}💰</div>
+        <div class="ach-bar"><i style="width:${(v/a.goal*100).toFixed(0)}%"></i></div>
+        <div style="font-size:10px;text-align:right;">${v}/${a.goal}</div>`;
+      body.appendChild(div);
+    }
+  }
+}
+
+// ============= TOAST =============
+let toastTimer = 0;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 1600);
+}
+
+// ============= MAIN =============
+load();
+updateHud(); render();
+setInterval(()=>{ render(); updateHud(); }, 500);
+setTimeout(()=>toast('🚜 欢迎回来！v2 加入了订单板、新内容、扩建、成就'), 800);
+</script>
+</body>
+</html>
